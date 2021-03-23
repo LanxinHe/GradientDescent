@@ -1,7 +1,7 @@
 from functions import data_with_channel
 from functions.test_functions import gray_ber
 from functions.loss_cal import ml_loss_single
-from model.GPU_model import LearnableExtension
+from model.CPU_model import LearnableExtension
 import torch
 import torch.nn as nn
 import torch.utils.data as Data
@@ -26,8 +26,8 @@ class DetDataset(Dataset):
             idx = idx.tolist()
 
         sample = {
-            'y': torch.from_numpy(self.y[idx, :]).to(torch.float32).cuda(),
-            'h_com': torch.from_numpy(self.h_com[idx, :, :]).to(torch.float32).cuda()
+            'y': torch.from_numpy(self.y[idx, :]).to(torch.float32),
+            'h_com': torch.from_numpy(self.h_com[idx, :, :]).to(torch.float32)
         }
         if self.transform:
             sample = self.transform(sample)
@@ -38,20 +38,19 @@ class DetDataset(Dataset):
 if __name__ == '__main__':
     TX = 8
     RX = 8
-    N_TRAIN = 20000
+    N_TRAIN = 10000
     N_TEST = 2000
     TRAIN_SPLIT = 0.9
     RATE = 2
     EBN0_TRAIN = 10
     LENGTH = 2 ** RATE
     BATCH_SIZE = 20
-    EPOCHS = 100
+    EPOCHS = 8
     GRU_HIDDEN_SIZE = 4 * TX
     GRU_LAYERS = 1
     BI_DIRECTIONAL = False
-    ITERATIONS = 300
-    STEP_SIZE = 0.02
-
+    DELTA_FACTOR = 0.1
+    NUM_FORESTES = 3
 
     _, _, train_y, train_h_com, train_Data_real, train_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TRAIN, rate=RATE, EbN0=EBN0_TRAIN)
     _, _, test_y, test_h_com, test_Data_real, test_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TEST, rate=RATE, EbN0=EBN0_TRAIN)
@@ -75,11 +74,11 @@ if __name__ == '__main__':
     #                                                                                                         GRU_HIDDEN_SIZE,
     #                                                                                                         LSTM_HIIDEN_SIZE)
 
-    detnet = LearnableExtension.DetModel(TX, GRU_HIDDEN_SIZE, GRU_LAYERS, BI_DIRECTIONAL, sigma).cuda()
+    detnet = LearnableExtension.DetModel(TX, GRU_HIDDEN_SIZE, GRU_LAYERS, BI_DIRECTIONAL, sigma)
     # detnet.load_state_dict(torch.load(PATH + str('/model1.pt')))
 
-    optim_det = torch.optim.Adam(detnet.parameters(), lr=1e-3)
-    scheduler = torch.optim.lr_scheduler.StepLR(optim_det, step_size=5, gamma=0.2)
+    optim_det = torch.optim.Adam(detnet.parameters(), lr=5e-3)
+    scheduler = torch.optim.lr_scheduler.StepLR(optim_det, step_size=10, gamma=0.2)
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optim_det, [10, 20, 35, 50, 70, 90], 0.1)
 
     # ------------------------------------- Train ----------------------------------------------------------
@@ -95,7 +94,7 @@ if __name__ == '__main__':
             detnet.zero_grad()
 
             # forward + backward + optimize
-            x = detnet(inputs, STEP_SIZE, ITERATIONS)
+            x = detnet(inputs)
             loss = ml_loss_single(x, y, h_com)
             loss.backward()
             optim_det.step()
@@ -115,9 +114,9 @@ if __name__ == '__main__':
                 y, h_com = data['y'], data['h_com']
                 inputs = (y, h_com)
 
-                x = detnet(inputs, STEP_SIZE, ITERATIONS)
+                x = detnet(inputs)
                 loss = ml_loss_single(x, y, h_com)
-                val_loss += loss.cpu().numpy()
+                val_loss += loss.numpy()
                 val_steps += 1
         print('validation loss: %.3f' % (val_loss / val_steps))
         scheduler.step()
@@ -137,7 +136,7 @@ if __name__ == '__main__':
             x = detnet(inputs)
             loss = ml_loss_single(x, y, h_com)
             predictions += [x]
-            test_loss += loss.cpu().numpy()
+            test_loss += loss.numpy()
             test_steps += 1
         print('test loss: %.3f' % (test_loss / test_steps))
         predictions = torch.cat(predictions).cpu().numpy()

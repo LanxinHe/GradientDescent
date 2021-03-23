@@ -40,12 +40,11 @@ class ExtensionL(nn.Module):
 class DetModel(nn.Module):
     def __init__(self, tx, gru_hidden_size, gru_layers, bi_directional, sigma):
         super(DetModel, self).__init__()
-        self.tx = tx
         self.sigma = sigma
         self.extension_cal = ExtensionL(tx, gru_hidden_size, gru_layers, bi_directional)
         self.bm = nn.BatchNorm1d(2 * tx, affine=True)
 
-    def forward(self, inputs, step_size, iterations):
+    def forward(self, inputs):
         """
         :param inputs: (y, H); y(batch_size, 2rx) H(batch_size, 2rx, 2tx)
         :return:
@@ -65,18 +64,6 @@ class DetModel(nn.Module):
         ext_y = torch.cat([y.unsqueeze(-1), ext_y], dim=1)   # (batch_size, 2rx+2tx, 1)
         ext_h = torch.cat([H, ext_h], dim=1)    # (batch_size, 2rx+2tx, 2tx)
 
-        x_hat = gradient_descent(ext_y, ext_h, step_size, iterations, batch_size, self.tx)
-        # x_hat = torch.bmm(torch.pinverse(ext_h), ext_y)
+        x_hat = torch.bmm(torch.pinverse(ext_h), ext_y)
 
         return x_hat
-
-
-def gradient_descent(y, h, step_size, iterations, batch_size, tx):
-    Hty = torch.bmm(torch.transpose(h, -1, 1), y.view(batch_size, -1, 1))   # (batch_size, 2tx, 1)
-    HtH = torch.bmm(torch.transpose(h, -1, 1), h)   # (batch_size, 2tx, 2tx)
-    x_hat = torch.randint(4, [batch_size, 2 * tx, 1]).cuda()  # 16QAM
-    x_hat = (2 * x_hat - 1).to(torch.float32)
-    for i in range(iterations):
-        x_hat = x_hat + 2 * step_size * (Hty - torch.bmm(HtH, x_hat))
-    return x_hat
-
