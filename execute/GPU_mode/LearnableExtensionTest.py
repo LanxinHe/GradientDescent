@@ -38,19 +38,19 @@ class DetDataset(Dataset):
 if __name__ == '__main__':
     TX = 8
     RX = 8
-    N_TRAIN = 20000
+    N_TRAIN = 40000
     N_TEST = 2000
     TRAIN_SPLIT = 0.9
     RATE = 2
     EBN0_TRAIN = 10
     LENGTH = 2 ** RATE
-    BATCH_SIZE = 20
+    BATCH_SIZE = 15
     EPOCHS = 100
-    GRU_HIDDEN_SIZE = 4 * TX
+    GRU_HIDDEN_SIZE = 2 * TX
     GRU_LAYERS = 1
     BI_DIRECTIONAL = False
     ITERATIONS = 300
-    STEP_SIZE = 0.02
+    STEP_SIZE = 0.032
 
 
     _, _, train_y, train_h_com, train_Data_real, train_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TRAIN, rate=RATE, EbN0=EBN0_TRAIN)
@@ -78,7 +78,7 @@ if __name__ == '__main__':
     detnet = LearnableExtension.DetModel(TX, GRU_HIDDEN_SIZE, GRU_LAYERS, BI_DIRECTIONAL, sigma).cuda()
     # detnet.load_state_dict(torch.load(PATH + str('/model1.pt')))
 
-    optim_det = torch.optim.Adam(detnet.parameters(), lr=1e-3)
+    optim_det = torch.optim.Adam(detnet.parameters(), lr=5e-5)
     scheduler = torch.optim.lr_scheduler.StepLR(optim_det, step_size=5, gamma=0.2)
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optim_det, [10, 20, 35, 50, 70, 90], 0.1)
 
@@ -134,7 +134,7 @@ if __name__ == '__main__':
             y, h_com = data['y'], data['h_com']
             inputs = (y, h_com)
 
-            x = detnet(inputs)
+            x = detnet(inputs, STEP_SIZE, ITERATIONS)
             loss = ml_loss_single(x, y, h_com)
             predictions += [x]
             test_loss += loss.cpu().numpy()
@@ -176,13 +176,12 @@ if __name__ == '__main__':
                 ber = gray_ber(prediction, test_Data_real, test_Data_imag, rate=RATE)
                 BER += [ber]
     # --------------------------------------- Save Model & Data --------------------------------------------------------
-    PATH = '../../pretrained_fixed_delta/rx%i/tx%i/rate%i/EBN0_Train%i/searching_times%i/batch_size%i/gru_hidden_size%i/gru_layers%i/Bi/delta_factor%.2f' % (RX, TX, RATE,
+    PATH = '../../pretrained_LR/tx%i/rx%i/rate%i/EBN0_Train%i/batch_size%i/gru_hidden_size%i/gru_layers%i/stepsize%.4f' % (TX, RX, RATE,
                                                                                                             EBN0_TRAIN,
-                                                                                                            SEARCHING_TIMES,
                                                                                                             BATCH_SIZE,
                                                                                                             GRU_HIDDEN_SIZE,
                                                                                                             GRU_LAYERS,
-                                                                                                            DELTA_FACTOR)
+                                                                                                            STEP_SIZE)
     os.makedirs(PATH)
     data_ber = pd.DataFrame(BER, columns=['BER'])
     data_ber.to_csv(PATH+str('/ber3.csv'))
