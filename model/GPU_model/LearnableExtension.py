@@ -52,18 +52,24 @@ class DetModel(nn.Module):
         """
         y, H = inputs
         batch_size = y.shape[0]
+        rx = round(H.shape[1] / 2)
 
         Hty = torch.bmm(torch.transpose(H, -1, 1), y.view(batch_size, -1, 1))   # (batch_size, 2tx, 1)
         HtH = torch.bmm(torch.transpose(H, -1, 1), H)   # (batch_size, 2tx, 2tx)
 
-        # rnn_inputs = self.bm(torch.cat([HtH, Hty], dim=-1))
-        rnn_inputs = torch.cat([HtH, Hty], dim=-1)
+        rnn_inputs = self.bm(torch.cat([HtH, Hty], dim=-1))
+        # rnn_inputs = torch.cat([HtH, Hty], dim=-1)
         ext_y, ext_h = self.extension_cal(rnn_inputs)
         ext_y = self.sigma * ext_y  # (batch_size, 2tx, 1)
         ext_h = self.sigma * ext_h  # (batch_size, 2tx, 2tx)
 
-        ext_y = torch.cat([y.unsqueeze(-1), ext_y], dim=1)   # (batch_size, 2rx+2tx, 1)
-        ext_h = torch.cat([H, ext_h], dim=1)    # (batch_size, 2rx+2tx, 2tx)
+        ext_y = torch.cat([y[:, :self.tx].unsqueeze(-1), ext_y[:, :self.tx, :],
+                           y[:, self.tx:].unsqueeze(-1), ext_y[:, self.tx:, :]], dim=1)  # (batch_size, 2rx+2tx, 1)
+        ext_h1 = torch.cat([H[:, :rx, :], ext_h[:, :self.tx, :]], dim=1)
+        ext_h2 = torch.cat([H[:, rx:, :], ext_h[:, self.tx:, :]], dim=1)
+        ext_h = torch.cat([ext_h1, ext_h2], dim=1)  # (batch_size, 2rx+2tx, 2tx)
+        # ext_y = torch.cat([y.unsqueeze(-1), ext_y], dim=1)
+        # ext_h = torch.cat([H, ext_h], dim=1)
 
         x_hat = gradient_descent(ext_y, ext_h, step_size, iterations, batch_size, self.tx)
         # x_hat = torch.bmm(torch.pinverse(ext_h), ext_y)
@@ -75,7 +81,7 @@ def gradient_descent(y, h, step_size, iterations, batch_size, tx):
     Hty = torch.bmm(torch.transpose(h, -1, 1), y.view(batch_size, -1, 1))   # (batch_size, 2tx, 1)
     HtH = torch.bmm(torch.transpose(h, -1, 1), h)   # (batch_size, 2tx, 2tx)
     x_hat = torch.randint(4, [batch_size, 2 * tx, 1]).cuda()  # 16QAM
-    x_hat = (2 * x_hat - 1).to(torch.float32)
+    x_hat = (2 * x_hat - 3).to(torch.float32)
     for i in range(iterations):
         x_hat = x_hat + 2 * step_size * (Hty - torch.bmm(HtH, x_hat))
     return x_hat

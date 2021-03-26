@@ -36,22 +36,21 @@ class DetDataset(Dataset):
 
 
 if __name__ == '__main__':
-    TX = 8
-    RX = 8
-    N_TRAIN = 40000
-    N_TEST = 2000
+    TX = 32
+    RX = 32
+    N_TRAIN = 20000
+    N_TEST = 1000
     TRAIN_SPLIT = 0.9
     RATE = 2
     EBN0_TRAIN = 10
     LENGTH = 2 ** RATE
-    BATCH_SIZE = 15
+    BATCH_SIZE = 40
     EPOCHS = 100
     GRU_HIDDEN_SIZE = 2 * TX
     GRU_LAYERS = 1
-    BI_DIRECTIONAL = False
-    ITERATIONS = 300
-    STEP_SIZE = 0.032
-
+    BI_DIRECTIONAL = True
+    ITERATIONS = 100
+    STEP_SIZE = 0.0005
 
     _, _, train_y, train_h_com, train_Data_real, train_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TRAIN, rate=RATE, EbN0=EBN0_TRAIN)
     _, _, test_y, test_h_com, test_Data_real, test_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TEST, rate=RATE, EbN0=EBN0_TRAIN)
@@ -78,7 +77,7 @@ if __name__ == '__main__':
     detnet = LearnableExtension.DetModel(TX, GRU_HIDDEN_SIZE, GRU_LAYERS, BI_DIRECTIONAL, sigma).cuda()
     # detnet.load_state_dict(torch.load(PATH + str('/model1.pt')))
 
-    optim_det = torch.optim.Adam(detnet.parameters(), lr=5e-5)
+    optim_det = torch.optim.Adam(detnet.parameters(), lr=1e-1)
     scheduler = torch.optim.lr_scheduler.StepLR(optim_det, step_size=5, gamma=0.2)
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optim_det, [10, 20, 35, 50, 70, 90], 0.1)
 
@@ -188,7 +187,7 @@ if __name__ == '__main__':
     torch.save(pre_det1.state_dict(), PATH+str('/model3_part1.pt'))
     torch.save(pre_det2.state_dict(), PATH+str('/model3_part2.pt'))
     # torch.save(pre_det3.state_dict(), PATH+str('/model2_part3.pt'))
-    torch.save(detnet.state_dict(), PATH+str('/model1.pt'))
+    torch.save(detnet.state_dict(), PATH+str('/model.pt'))
     # use the following line to load model
     detnet.load_state_dict(torch.load(PATH + str('/model1.pt')))
 
