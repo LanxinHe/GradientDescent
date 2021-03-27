@@ -49,9 +49,10 @@ def gpu_loss_16qam(predictions, labels, loss_fn):
     return loss
 
 
-def common_loss(prediction, labels, loss_fn):
-    modulated_labels = (2 * labels - 1).to(torch.float32)
-    loss = loss_fn(prediction, modulated_labels)
+def common_loss(prediction, labels, rate):
+    loss_fn = torch.nn.MSELoss()
+    modulated_labels = (2 * labels - 2**rate + 1).to(torch.float32)
+    loss = loss_fn(prediction.squeeze(-1), modulated_labels)
     return loss
 
 
