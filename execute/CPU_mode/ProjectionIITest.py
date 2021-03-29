@@ -2,7 +2,7 @@ from functions import data_with_channel
 from functions.test_functions import gray_ber
 # from functions.loss_cal import ml_loss_single
 from functions.loss_cal import common_loss
-from model.CPU_model import Projection
+from model.CPU_model import ProjectionII
 import torch
 import torch.nn as nn
 import torch.utils.data as Data
@@ -43,17 +43,15 @@ class DetDataset(Dataset):
 if __name__ == '__main__':
     TX = 16
     RX = 16
-    N_TRAIN = 50000
+    N_TRAIN = 20000
     N_TEST = 2000
     TRAIN_SPLIT = 0.9
-    RATE = 2
+    RATE = 1
     EBN0_TRAIN = 10
     LENGTH = 2 ** RATE
     BATCH_SIZE = 20
     EPOCHS = 100
-    GRU_HIDDEN_SIZE = 2 * TX
-    GRU_LAYERS = 2
-    BI_DIRECTIONAL = True
+
     DIM_Z = 2 * TX
     STEP_SIZE = 0.0001
     ITERATIONS = 10
@@ -76,10 +74,10 @@ if __name__ == '__main__':
     #                                                                                                         GRU_HIDDEN_SIZE,
     #                                                                                                         LSTM_HIIDEN_SIZE)
 
-    detnet = Projection.DetModel(TX, RATE, DIM_Z, GRU_HIDDEN_SIZE, GRU_LAYERS, BI_DIRECTIONAL)
+    detnet = ProjectionII.DetModel(TX, RX, RATE, DIM_Z)
     # detnet.load_state_dict(torch.load(PATH + str('/model1.pt')))
 
-    optim_det = torch.optim.Adam(detnet.parameters(), lr=1e-3)
+    optim_det = torch.optim.Adam(detnet.parameters(), lr=1e-2)
     scheduler = torch.optim.lr_scheduler.StepLR(optim_det, step_size=10, gamma=0.2)
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optim_det, [10, 20, 35, 50, 70, 90], 0.1)
 

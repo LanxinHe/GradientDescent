@@ -8,42 +8,30 @@ In this Module, we use Hty and HtH to predict the transform matrix
 
 
 class ProjectMatrix(nn.Module):
-    def __init__(self, tx, dim_z, hidden_size, gru_layers, bi_directional):
+    def __init__(self, tx, rx, dim_z):
         super(ProjectMatrix, self).__init__()
-        self.gru = nn.GRU(2*tx+1, hidden_size, num_layers=gru_layers, bidirectional=bi_directional)
         self.sigmoid = nn.Sigmoid()
-        # self.dim_z = dim_z
 
-        if bi_directional:
-            num_directions = 2
-        else:
-            num_directions = 1
-        self.w_Wz = nn.Parameter(torch.randn([dim_z, num_directions * hidden_size]))
-        # self.b_H = nn.Parameter(torch.zeros([2 * tx]))
-        self.w_Wx = nn.Parameter(torch.randn([dim_z, num_directions * hidden_size]))
-        # self.b_y = nn.Parameter(torch.randn([1]))
+        self.w1 = nn.Parameter(torch.randn([dim_z, 2*rx]))
+        self.w2 = nn.Parameter(torch.randn([2*tx, dim_z]))
 
-    def forward(self, inputs):
+    def forward(self, h_matrix):
         """
-        :param inputs: cat(Hty, HtH) in shape of (batch_size, 2tx, 2tx+1)
+        :param h_matrix: channel matrix, in shape of (batch_size, 2rx, 2tx)
         :return:
         """
-        gru_inputs = inputs.permute(1, 0, 2)
-        gru_outputs, _ = self.gru(gru_inputs)   # gru_outputs(2tx, batch_size, hidden_size)
-        w_z = torch.sigmoid(torch.matmul(gru_outputs, self.w_Wz.T))  # (2tx, batch_size, dim_z)
-        w_z = w_z.permute(1, 2, 0)   # (batch_size, dim_z, 2tx)
-        w_x = torch.sigmoid(torch.matmul(gru_outputs, self.w_Wx.T))  # (2tx, batch_size, dim_z)
-        w_x = w_x.permute(1, 0, 2)  # (batch_size, 2tx, dim_z)
+        w_z = self.sigmoid(torch.matmul(self.w1, h_matrix))
+        w_x = self.sigmoid(torch.matmul(h_matrix, self.w2))
 
         return w_z, w_x
 
 
 class DetModel(nn.Module):
-    def __init__(self, tx, rate, dim_z, gru_hidden_size, gru_layers, bi_directional):
+    def __init__(self, tx, rx, rate, dim_z,):
         super(DetModel, self).__init__()
         self.tx = tx
         self.rate = rate
-        self.project_cal = ProjectMatrix(tx, dim_z, gru_hidden_size, gru_layers, bi_directional)
+        self.project_cal = ProjectMatrix(tx, rx, dim_z)
         self.bm = nn.BatchNorm1d(2 * tx, affine=True)
 
     def forward(self, inputs, step_size, iterations):
@@ -57,9 +45,9 @@ class DetModel(nn.Module):
         Hty = torch.bmm(torch.transpose(H, -1, 1), y.view(batch_size, -1, 1))   # (batch_size, 2tx, 1)
         HtH = torch.bmm(torch.transpose(H, -1, 1), H)   # (batch_size, 2tx, 2tx)
 
-        rnn_inputs = self.bm(torch.cat([HtH, Hty], dim=-1))
+        # rnn_inputs = self.bm(torch.cat([HtH, Hty], dim=-1))
         # rnn_inputs = torch.cat([HtH, Hty], dim=-1)
-        w_z, w_x = self.project_cal(rnn_inputs)
+        w_z, w_x = self.project_cal(H)
 
         x_hat = torch.randint(2 ** self.rate, [batch_size, 2 * self.tx, 1])  # 16QAM
         x_hat = (2 * x_hat - 2 ** self.rate + 1).to(torch.float32)
