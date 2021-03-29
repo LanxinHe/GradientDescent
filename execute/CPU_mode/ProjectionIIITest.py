@@ -49,12 +49,12 @@ if __name__ == '__main__':
     RATE = 1
     EBN0_TRAIN = 10
     LENGTH = 2 ** RATE
-    BATCH_SIZE = 20
+    BATCH_SIZE = 5
     EPOCHS = 100
 
-    RNN_HIDDEN_SIZE = 4 * TX
+    RNN_HIDDEN_SIZE = 2 * TX
     STEP_SIZE = 0.015
-    ITERATIONS = 10
+    ITERATIONS = 5
 
     _, _, train_y, train_h_com, train_Data_real, train_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TRAIN, rate=RATE, EbN0=EBN0_TRAIN)
     _, _, test_y, test_h_com, test_Data_real, test_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TEST, rate=RATE, EbN0=EBN0_TRAIN)
@@ -67,14 +67,7 @@ if __name__ == '__main__':
     val_loader = Data.DataLoader(valSet, batch_size=BATCH_SIZE, shuffle=False)
     test_loader = Data.DataLoader(test_set, batch_size=BATCH_SIZE, shuffle=False)
     # ------------------------------------- Establish Network ----------------------------------------------
-    # PATH = '../../pretrained_model_adaptive/rx%i/tx%i/rate%i/EBN0_Train%i/searching_times%i/batch_size%i/gru_hidden_size%i/lstm_hidden_size%i' % (RX, TX, RATE,
-    #                                                                                                         EBN0_TRAIN,
-    #                                                                                                         SEARCHING_TIMES,
-    #                                                                                                         BATCH_SIZE,
-    #                                                                                                         GRU_HIDDEN_SIZE,
-    #                                                                                                         LSTM_HIIDEN_SIZE)
-
-    detnet = ProjectionIII.DetModel(TX, RATE, RNN_HIDDEN_SIZE)
+    detnet = ProjectionIII.DetModel(TX, RNN_HIDDEN_SIZE)
     # detnet.load_state_dict(torch.load(PATH + str('/model1.pt')))
 
     optim_det = torch.optim.Adam(detnet.parameters(), lr=1e-3)
@@ -94,7 +87,11 @@ if __name__ == '__main__':
             detnet.zero_grad()
 
             # forward + backward + optimize
-            x, h = detnet(inputs, STEP_SIZE, ITERATIONS)
+            x_ini = torch.randint(2 ** RATE, [BATCH_SIZE, 2 * TX, 1])  # 16QAM
+            x_ini = (2 * x_ini - 2 ** RATE + 1).to(torch.float32)
+            h_ini = torch.zeros([BATCH_SIZE, RNN_HIDDEN_SIZE])
+
+            x, h = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
             loss = common_loss(x, label, RATE)
             loss.backward()
             optim_det.step()
@@ -114,7 +111,11 @@ if __name__ == '__main__':
                 y, h_com, label = data['y'], data['h_com'], data['label']
                 inputs = (y, h_com)
 
-                x, h = detnet(inputs, STEP_SIZE, ITERATIONS)
+                x_ini = torch.randint(2 ** RATE, [BATCH_SIZE, 2 * TX, 1])  # 16QAM
+                x_ini = (2 * x_ini - 2 ** RATE + 1).to(torch.float32)
+                h_ini = torch.zeros([BATCH_SIZE, RNN_HIDDEN_SIZE])
+
+                x, h = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
                 loss = common_loss(x, label, RATE)
                 val_loss += loss.numpy()
                 val_steps += 1
@@ -133,7 +134,11 @@ if __name__ == '__main__':
             y, h_com, label = data['y'], data['h_com'], data['label']
             inputs = (y, h_com)
 
-            x, h = detnet(inputs, STEP_SIZE, ITERATIONS)
+            x_ini = torch.randint(2 ** RATE, [BATCH_SIZE, 2 * TX, 1])  # 16QAM
+            x_ini = (2 * x_ini - 2 ** RATE + 1).to(torch.float32)
+            h_ini = torch.zeros([BATCH_SIZE, RNN_HIDDEN_SIZE])
+
+            x, h = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
             loss = common_loss(x, label, RATE)
             predictions += [x]
             test_loss += loss.numpy()
@@ -148,9 +153,10 @@ if __name__ == '__main__':
         TEST_EBN0 = np.linspace(0, 15, 16)
         BER = []
         for ebn0 in TEST_EBN0:
-            test_hty, test_hth, test_y, test_h_com, test_Data_real, test_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TEST, rate=RATE,
-                                                                                           EbN0=ebn0)
-            test_set = DetDataset(test_hty, test_hth, test_y, test_h_com)
+            _, _, test_y, test_h_com, test_Data_real, test_Data_imag = data_with_channel.get_data(tx=TX, rx=RX,
+                                                                                                  K=N_TEST, rate=RATE,
+                                                                                                  EbN0=EBN0_TRAIN)
+            test_set = DetDataset(test_y, test_h_com, test_Data_real, test_Data_imag)
             test_loader = Data.DataLoader(test_set, batch_size=BATCH_SIZE, shuffle=False)
             with torch.no_grad():
                 detnet.eval()
@@ -158,32 +164,35 @@ if __name__ == '__main__':
                 test_steps = 0
                 prediction = []
                 for i, data in enumerate(test_loader, 0):
-                    inputs, y, h_com = (data['hty'], data['hth']), data['y'], data['h_com']
-                    prediction1, h1 = pre_det1(inputs, x_ini, h_ini)
-                    prediction2, h2 = pre_det2(inputs, prediction1[-1], h1)
-                    prediction3, h3 = pre_det3(inputs, prediction2[-1], h2)
-                    predictions, h4 = pre_det4(inputs, prediction3[-1], h3)
-                    # predictions, h5 = detnet(inputs, prediction4[-1], h4)
-                    loss = ml_loss(predictions, y, h_com)
-                    prediction += [predictions[-1]]
+                    y, h_com, label = data['y'], data['h_com'], data['label']
+                    inputs = (y, h_com)
+
+                    x_ini = torch.randint(2 ** RATE, [BATCH_SIZE, 2 * TX, 1])  # 16QAM
+                    x_ini = (2 * x_ini - 2 ** RATE + 1).to(torch.float32)
+                    h_ini = torch.zeros([BATCH_SIZE, RNN_HIDDEN_SIZE])
+
+                    x, h = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
+
+                    loss = common_loss(x, label, RATE)
+                    prediction += [x]
                     test_loss += loss.numpy()
                     test_steps += 1
                 print('test loss: %.3f' % (test_loss / test_steps))
 
-                prediction = torch.cat(prediction).cpu().numpy()
-                prediction = ((prediction + LENGTH - 1) / 2).round()
+                prediction = torch.cat(prediction).numpy()
+                prediction = ((prediction + LENGTH - 1) / 2).squeeze(-1).round()
                 ber = gray_ber(prediction, test_Data_real, test_Data_imag, rate=RATE)
                 BER += [ber]
     # --------------------------------------- Save Model & Data --------------------------------------------------------
-    PATH = '../../pretrained_fixed_delta/rx%i/tx%i/rate%i/EBN0_Train%i//batch_size%i/gru_hidden_size%i/gru_layers%i/dim_z%i/stepsize%i/iterations%i' % (RX, TX, RATE,
+    PATH = '../../pretrained_projectionIII/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/batch_size%i/rnn_hidden_size%i/step_size%.5f' % (TX, RX, RATE,
                                                                                                             EBN0_TRAIN,
+                                                                                                            ITERATIONS,
                                                                                                             BATCH_SIZE,
-                                                                                                            GRU_HIDDEN_SIZE,
-                                                                                                            GRU_LAYERS,
-                                                                                                            DIM_Z,STEP_SIZE, ITERATIONS)
+                                                                                                            RNN_HIDDEN_SIZE,
+                                                                                                            STEP_SIZE)
     os.makedirs(PATH)
     data_ber = pd.DataFrame(BER, columns=['BER'])
-    data_ber.to_csv(PATH+str('/ber3.csv'))
+    data_ber.to_csv(PATH+str('/ber.csv'))
     torch.save(pre_det1.state_dict(), PATH+str('/model3_part1.pt'))
     torch.save(pre_det2.state_dict(), PATH+str('/model3_part2.pt'))
     # torch.save(pre_det3.state_dict(), PATH+str('/model2_part3.pt'))

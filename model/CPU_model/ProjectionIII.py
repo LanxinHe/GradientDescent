@@ -29,15 +29,13 @@ class RecurrentCell(nn.Module):
 
 
 class DetModel(nn.Module):
-    def __init__(self, tx, rate, rnn_hidden_size):
+    def __init__(self, tx, rnn_hidden_size):
         super(DetModel, self).__init__()
-        self.tx = tx
-        self.rate = rate
         self.r_cell = RecurrentCell(tx, rnn_hidden_size)
-        self.hidden_size = rnn_hidden_size
+
         # self.bm = nn.BatchNorm1d(2 * tx, affine=True)
 
-    def forward(self, inputs, step_size, iterations):
+    def forward(self, inputs, x, h, step_size, iterations):
         """
         :param inputs: (y, H); y(batch_size, 2rx) H(batch_size, 2rx, 2tx)
         :return:
@@ -47,10 +45,6 @@ class DetModel(nn.Module):
 
         Hty = torch.bmm(torch.transpose(H, -1, 1), y.view(batch_size, -1, 1))   # (batch_size, 2tx, 1)
         HtH = torch.bmm(torch.transpose(H, -1, 1), H)   # (batch_size, 2tx, 2tx)
-
-        x = torch.randint(2 ** self.rate, [batch_size, 2 * self.tx, 1])  # 16QAM
-        x = (2 * x - 2 ** self.rate + 1).to(torch.float32)
-        h = torch.zeros([batch_size, self.hidden_size])
 
         for i in range(iterations):
             x, h = self.gradient_descent(Hty, HtH, step_size, x, h)
