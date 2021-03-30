@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 """
-In this Module, we use Hty and HtH to predict the fixed delta
+In this Module, we input Hty and HtH into a GRU to predict the extension part of MMSE matrix
 """
 
 

@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 """
-In this Module, we use Hty and HtH to predict the transform matrix
+In this Module, we are expecting predict two matrix w1 and w2 directly to get Wz and Wx by w1 * H and H * w2
 """
 
 

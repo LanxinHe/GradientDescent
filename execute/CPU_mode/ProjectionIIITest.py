@@ -49,12 +49,12 @@ if __name__ == '__main__':
     RATE = 1
     EBN0_TRAIN = 10
     LENGTH = 2 ** RATE
-    BATCH_SIZE = 5
+    BATCH_SIZE = 20
     EPOCHS = 100
 
-    RNN_HIDDEN_SIZE = 2 * TX
+    RNN_HIDDEN_SIZE = 6 * TX
     STEP_SIZE = 0.015
-    ITERATIONS = 5
+    ITERATIONS = 4
 
     _, _, train_y, train_h_com, train_Data_real, train_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TRAIN, rate=RATE, EbN0=EBN0_TRAIN)
     _, _, test_y, test_h_com, test_Data_real, test_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TEST, rate=RATE, EbN0=EBN0_TRAIN)
@@ -67,8 +67,14 @@ if __name__ == '__main__':
     val_loader = Data.DataLoader(valSet, batch_size=BATCH_SIZE, shuffle=False)
     test_loader = Data.DataLoader(test_set, batch_size=BATCH_SIZE, shuffle=False)
     # ------------------------------------- Establish Network ----------------------------------------------
+    # PATH = '../../pretrained_projectionIII/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/batch_size%i/rnn_hidden_size%i/step_size%.5f' % (TX, RX, RATE,
+    #                                                                                                         EBN0_TRAIN,
+    #                                                                                                         ITERATIONS,
+    #                                                                                                         BATCH_SIZE,
+    #                                                                                                         RNN_HIDDEN_SIZE,
+    #                                                                                                         STEP_SIZE)
     detnet = ProjectionIII.DetModel(TX, RNN_HIDDEN_SIZE)
-    # detnet.load_state_dict(torch.load(PATH + str('/model1.pt')))
+    # detnet.load_state_dict(torch.load(PATH + str('/model.pt')))
 
     optim_det = torch.optim.Adam(detnet.parameters(), lr=1e-3)
     scheduler = torch.optim.lr_scheduler.StepLR(optim_det, step_size=10, gamma=0.2)
@@ -155,7 +161,7 @@ if __name__ == '__main__':
         for ebn0 in TEST_EBN0:
             _, _, test_y, test_h_com, test_Data_real, test_Data_imag = data_with_channel.get_data(tx=TX, rx=RX,
                                                                                                   K=N_TEST, rate=RATE,
-                                                                                                  EbN0=EBN0_TRAIN)
+                                                                                                  EbN0=ebn0)
             test_set = DetDataset(test_y, test_h_com, test_Data_real, test_Data_imag)
             test_loader = Data.DataLoader(test_set, batch_size=BATCH_SIZE, shuffle=False)
             with torch.no_grad():

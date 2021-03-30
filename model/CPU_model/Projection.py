@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 """
-In this Module, we use Hty and HtH to predict the transform matrix
+In this Module, we put Hty and HtH into a GRU to predict the transform matrix Wz and Wx
 """
 
 

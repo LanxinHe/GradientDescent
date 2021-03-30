@@ -3,7 +3,7 @@ import torch.nn as nn
 
 
 """
-In this Module, we use Hty and HtH to predict the transform matrix
+In this Module, we rewrite DetNet by utilizing RNNCell in PyTorch
 """
 
 
