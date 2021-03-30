@@ -51,7 +51,7 @@ if __name__ == '__main__':
     LENGTH = 2 ** RATE
     BATCH_SIZE = 20
     EPOCHS = 100
-
+    PROJECT_TIMES = 3
     RNN_HIDDEN_SIZE = 6 * TX
     STEP_SIZE = 0.012
     ITERATIONS = 10
@@ -73,7 +73,7 @@ if __name__ == '__main__':
     #                                                                                                         BATCH_SIZE,
     #                                                                                                         RNN_HIDDEN_SIZE,
     #                                                                                                         STEP_SIZE)
-    detnet = ProjectionIV.DetModel(TX, RNN_HIDDEN_SIZE)
+    detnet = ProjectionIV.DetModel(TX, RNN_HIDDEN_SIZE, PROJECT_TIMES)
     # detnet.load_state_dict(torch.load(PATH + str('/model.pt')))
 
     optim_det = torch.optim.Adam(detnet.parameters(), lr=1e-4)
@@ -190,9 +190,10 @@ if __name__ == '__main__':
                 ber = gray_ber(prediction, test_Data_real, test_Data_imag, rate=RATE)
                 BER += [ber]
     # --------------------------------------- Save Model & Data --------------------------------------------------------
-    PATH = '../../pretrained_projectionIV/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/batch_size%i/rnn_hidden_size%i/step_size%.5f' % (TX, RX, RATE,
+    PATH = '../../pretrained_projectionIV/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/project_times%i/batch_size%i/rnn_hidden_size%i/step_size%.5f' % (TX, RX, RATE,
                                                                                                             EBN0_TRAIN,
                                                                                                             ITERATIONS,
+                                                                                                            PROJECT_TIMES,
                                                                                                             BATCH_SIZE,
                                                                                                             RNN_HIDDEN_SIZE,
                                                                                                             STEP_SIZE)
