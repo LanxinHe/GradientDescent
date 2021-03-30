@@ -2,7 +2,7 @@ from functions import data_with_channel
 from functions.test_functions import gray_ber
 # from functions.loss_cal import ml_loss_single
 from functions.loss_cal import common_loss
-from model.CPU_model import ProjectionIII
+from model.CPU_model import ProjectionIV
 import torch
 import torch.nn as nn
 import torch.utils.data as Data
@@ -54,7 +54,7 @@ if __name__ == '__main__':
 
     RNN_HIDDEN_SIZE = 6 * TX
     STEP_SIZE = 0.015
-    ITERATIONS = 5
+    ITERATIONS = 10
 
     _, _, train_y, train_h_com, train_Data_real, train_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TRAIN, rate=RATE, EbN0=EBN0_TRAIN)
     _, _, test_y, test_h_com, test_Data_real, test_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TEST, rate=RATE, EbN0=EBN0_TRAIN)
@@ -73,10 +73,10 @@ if __name__ == '__main__':
     #                                                                                                         BATCH_SIZE,
     #                                                                                                         RNN_HIDDEN_SIZE,
     #                                                                                                         STEP_SIZE)
-    detnet = ProjectionIII.DetModel(TX, RNN_HIDDEN_SIZE)
+    detnet = ProjectionIV.DetModel(TX, RNN_HIDDEN_SIZE)
     # detnet.load_state_dict(torch.load(PATH + str('/model.pt')))
 
-    optim_det = torch.optim.Adam(detnet.parameters(), lr=1e-3)
+    optim_det = torch.optim.Adam(detnet.parameters(), lr=1e-4)
     scheduler = torch.optim.lr_scheduler.StepLR(optim_det, step_size=10, gamma=0.2)
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optim_det, [10, 20, 35, 50, 70, 90], 0.1)
 
