@@ -53,7 +53,7 @@ if __name__ == '__main__':
     EPOCHS = 100
 
     RNN_HIDDEN_SIZE = 6 * TX
-    STEP_SIZE = 0.015
+    STEP_SIZE = 0.012
     ITERATIONS = 10
 
     _, _, train_y, train_h_com, train_Data_real, train_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TRAIN, rate=RATE, EbN0=EBN0_TRAIN)
@@ -151,7 +151,7 @@ if __name__ == '__main__':
             test_steps += 1
         print('test loss: %.3f' % (test_loss / test_steps))
         predictions = torch.cat(predictions).cpu().numpy()
-        predictions = ((predictions + LENGTH - 1)/2).squeeze(-1).round()
+        predictions = ((predictions + LENGTH - 1)/2).round()
         ber = gray_ber(predictions, test_Data_real, test_Data_imag, rate=RATE)
     # ------------------------------------------------ Whole Test ------------------------------------------------------
     with torch.no_grad():
@@ -186,11 +186,11 @@ if __name__ == '__main__':
                 print('test loss: %.3f' % (test_loss / test_steps))
 
                 prediction = torch.cat(prediction).numpy()
-                prediction = ((prediction + LENGTH - 1) / 2).squeeze(-1).round()
+                prediction = ((prediction + LENGTH - 1) / 2).round()
                 ber = gray_ber(prediction, test_Data_real, test_Data_imag, rate=RATE)
                 BER += [ber]
     # --------------------------------------- Save Model & Data --------------------------------------------------------
-    PATH = '../../pretrained_projectionIII/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/batch_size%i/rnn_hidden_size%i/step_size%.5f' % (TX, RX, RATE,
+    PATH = '../../pretrained_projectionIV/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/batch_size%i/rnn_hidden_size%i/step_size%.5f' % (TX, RX, RATE,
                                                                                                             EBN0_TRAIN,
                                                                                                             ITERATIONS,
                                                                                                             BATCH_SIZE,

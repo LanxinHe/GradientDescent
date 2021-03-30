@@ -48,7 +48,10 @@ class DetModel(nn.Module):
 
         for i in range(iterations):
             x = gradient_descent(Hty, HtH, step_size, x)
-
+        x, h = self.r_cell(x.squeeze(-1), h)
+        x = x.unsqueeze(-1)
+        for i in range(iterations):
+            x = gradient_descent(Hty, HtH, step_size, x)
         x, h = self.r_cell(x.squeeze(-1), h)
 
         return x, h
