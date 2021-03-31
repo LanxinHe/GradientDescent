@@ -19,7 +19,7 @@ class DetDataset(Dataset):
         self.h_com = h_com
         self.label = torch.cat([torch.from_numpy(data_real.T),
                                 torch.from_numpy(data_imag.T)],
-                               dim=1).long()
+                               dim=1).long().cuda()
         self.transform = transform
 
     def __len__(self):
@@ -30,8 +30,8 @@ class DetDataset(Dataset):
             idx = idx.tolist()
 
         sample = {
-            'y': torch.from_numpy(self.y[idx, :]).to(torch.float32),
-            'h_com': torch.from_numpy(self.h_com[idx, :, :]).to(torch.float32),
+            'y': torch.from_numpy(self.y[idx, :]).to(torch.float32).cuda(),
+            'h_com': torch.from_numpy(self.h_com[idx, :, :]).to(torch.float32).cuda(),
             'label': self.label[idx, :],
         }
         if self.transform:
@@ -41,22 +41,22 @@ class DetDataset(Dataset):
 
 
 if __name__ == '__main__':
-    TX = 16
-    RX = 16
-    N_TRAIN = 50000
+    TX = 32
+    RX = 32
+    N_TRAIN = 20000
     N_TEST = 2000
     TRAIN_SPLIT = 0.9
-    RATE = 2
+    RATE = 1
     EBN0_TRAIN = 10
     LENGTH = 2 ** RATE
     BATCH_SIZE = 20
     EPOCHS = 100
-    GRU_HIDDEN_SIZE = 2 * TX
+    GRU_HIDDEN_SIZE = 4 * TX
     GRU_LAYERS = 2
     BI_DIRECTIONAL = True
-    DIM_Z = 2 * TX
-    STEP_SIZE = 0.0001
-    ITERATIONS = 10
+    DIM_Z = TX
+    STEP_SIZE = 0.000002
+    ITERATIONS = 20
 
     _, _, train_y, train_h_com, train_Data_real, train_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TRAIN, rate=RATE, EbN0=EBN0_TRAIN)
     _, _, test_y, test_h_com, test_Data_real, test_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TEST, rate=RATE, EbN0=EBN0_TRAIN)
@@ -69,18 +69,17 @@ if __name__ == '__main__':
     val_loader = Data.DataLoader(valSet, batch_size=BATCH_SIZE, shuffle=False)
     test_loader = Data.DataLoader(test_set, batch_size=BATCH_SIZE, shuffle=False)
     # ------------------------------------- Establish Network ----------------------------------------------
-    PATH = '../../pretrained_Projection/tx%i/rx%i/rate%i/EBN0_Train%i/batch_size%i/gru_hidden_size%i/gru_layers%i/z_dim%i/stepsize%.6f' % (TX, RX, RATE,
-                                                                                                            EBN0_TRAIN,
-                                                                                                            BATCH_SIZE,
-                                                                                                            GRU_HIDDEN_SIZE,
-                                                                                                            GRU_LAYERS,
-                                                                                                            DIM_Z,
-                                                                                                            STEP_SIZE)
+    # PATH = '../../pretrained_model_adaptive/rx%i/tx%i/rate%i/EBN0_Train%i/searching_times%i/batch_size%i/gru_hidden_size%i/lstm_hidden_size%i' % (RX, TX, RATE,
+    #                                                                                                         EBN0_TRAIN,
+    #                                                                                                         SEARCHING_TIMES,
+    #                                                                                                         BATCH_SIZE,
+    #                                                                                                         GRU_HIDDEN_SIZE,
+    #                                                                                                         LSTM_HIIDEN_SIZE)
 
-    detnet = Projection.DetModel(TX, RATE, DIM_Z, GRU_HIDDEN_SIZE, GRU_LAYERS, BI_DIRECTIONAL)
-    # detnet.load_state_dict(torch.load(PATH + str('/model.pt')))
+    detnet = Projection.DetModel(TX, RATE, DIM_Z, GRU_HIDDEN_SIZE, GRU_LAYERS, BI_DIRECTIONAL).cuda()
+    # detnet.load_state_dict(torch.load(PATH + str('/model1.pt')))
 
-    optim_det = torch.optim.Adam(detnet.parameters(), lr=1e-3)
+    optim_det = torch.optim.Adam(detnet.parameters(), lr=1e-4)
     scheduler = torch.optim.lr_scheduler.StepLR(optim_det, step_size=10, gamma=0.2)
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optim_det, [10, 20, 35, 50, 70, 90], 0.1)
 
@@ -178,13 +177,12 @@ if __name__ == '__main__':
                 ber = gray_ber(prediction, test_Data_real, test_Data_imag, rate=RATE)
                 BER += [ber]
     # --------------------------------------- Save Model & Data --------------------------------------------------------
-    PATH = '../../pretrained_Projection/tx%i/rx%i/rate%i/EBN0_Train%i/batch_size%i/gru_hidden_size%i/gru_layers%i/z_dim%i/stepsize%.6f' % (TX, RX, RATE,
+    PATH = '../../pretrained_fixed_delta/rx%i/tx%i/rate%i/EBN0_Train%i//batch_size%i/gru_hidden_size%i/gru_layers%i/dim_z%i/stepsize%i/iterations%i' % (RX, TX, RATE,
                                                                                                             EBN0_TRAIN,
                                                                                                             BATCH_SIZE,
                                                                                                             GRU_HIDDEN_SIZE,
                                                                                                             GRU_LAYERS,
-                                                                                                            DIM_Z,
-                                                                                                            STEP_SIZE)
+                                                                                                            DIM_Z,STEP_SIZE, ITERATIONS)
     os.makedirs(PATH)
     data_ber = pd.DataFrame(BER, columns=['BER'])
     data_ber.to_csv(PATH+str('/ber3.csv'))

@@ -87,7 +87,7 @@ def get_mmse(tx=8, rx=8, K=1000, rate=1, EbN0=15):
         h_t_y[:, k] = np.dot(h_mmse[k, :, :].T, receive_mmse[:, k])
         h_t_h[k, :, :] = np.matmul(h_mmse[k, :, :].T, h_mmse[k, :, :])
 
-    return h_t_y.T, h_t_h, data_real, data_imag
+    return h_t_y.T, h_t_h, receive_mmse.T, h_mmse, data_real, data_imag
 
 
 def get_onehot_label(data_real, data_imag):
