@@ -9,6 +9,7 @@ from torch.utils.data import Dataset
 import numpy as np
 import pandas as pd
 import os
+import matplotlib.pyplot as plt
 
 
 # --------------------------------------------- Dataset ------------------------------------------------------
@@ -42,18 +43,18 @@ class DetDataset(Dataset):
 if __name__ == '__main__':
     TX = 16
     RX = 16
-    N_TRAIN = 100000
-    N_TEST = 2000
+    N_TRAIN = 100
+    N_TEST = 1000
     TRAIN_SPLIT = 0.9
     RATE = 2
     EBN0_TRAIN = 10
     LENGTH = 2 ** RATE
     BATCH_SIZE = 20
     EPOCHS = 100
-    PROJECT_TIMES = 4
-    RNN_HIDDEN_SIZE = 6 * TX
+    PROJECT_TIMES = 5
+    RNN_HIDDEN_SIZE = 8 * TX
     STEP_SIZE = 0.012
-    ITERATIONS = 5
+    ITERATIONS = 8
 
     train_y, train_h_com, train_Data_real, train_Data_imag = data_preparation.get_mmse(tx=TX, rx=RX, K=N_TRAIN, rate=RATE, EbN0=EBN0_TRAIN)
     test_y, test_h_com, test_Data_real, test_Data_imag = data_preparation.get_mmse(tx=TX, rx=RX, K=N_TEST, rate=RATE, EbN0=EBN0_TRAIN)
@@ -66,77 +67,29 @@ if __name__ == '__main__':
     val_loader = Data.DataLoader(valSet, batch_size=BATCH_SIZE, shuffle=False)
     test_loader = Data.DataLoader(test_set, batch_size=BATCH_SIZE, shuffle=False)
     # ------------------------------------- Establish Network ----------------------------------------------
-    # PATH = '../../pretrained_projectionV/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/project_times%i/batch_size%i/rnn_hidden_size%i/step_size%.5f' % (TX, RX, RATE,
+    # PATH = '../../pretrained_projectionX_Extension/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/project_times%i/batch_size%i/rnn_hidden_size%i/step_size%.5f' % (TX, RX, RATE,
     #                                                                                                         EBN0_TRAIN,
     #                                                                                                         ITERATIONS,
     #                                                                                                         PROJECT_TIMES,
     #                                                                                                         BATCH_SIZE,
     #                                                                                                         RNN_HIDDEN_SIZE,
     #                                                                                                         STEP_SIZE)
-    detnet = ProjectionX.DetModel(TX, RNN_HIDDEN_SIZE, PROJECT_TIMES)
-    # detnet.load_state_dict(torch.load(PATH + str('/model.pt')))
-
-    optim_det = torch.optim.Adam(detnet.parameters(), lr=5e-4)
-    scheduler = torch.optim.lr_scheduler.StepLR(optim_det, step_size=10, gamma=0.2)
-
-    # scheduler = torch.optim.lr_scheduler.MultiStepLR(optim_det, [10, 20, 35, 50, 70, 90], 0.1)
-
-    # ------------------------------------- Train ----------------------------------------------------------
-    print('Begin Training:')
-    for epoch in range(EPOCHS):
-        running_loss = 0.0
-        detnet.train()
-        for i, data in enumerate(train_loader, 0):
-            y, h_com, label = data['y'], data['h_com'], data['label']
-            inputs = (y, h_com)
-
-            # zero the parameter gradients
-            detnet.zero_grad()
-
-            # forward + backward + optimize
-            x_ini = torch.randint(2 ** RATE, [BATCH_SIZE, 2 * TX, 1])  # 16QAM
-            x_ini = (2 * x_ini - 2 ** RATE + 1).to(torch.float32)
-            h_ini = torch.zeros([BATCH_SIZE, RNN_HIDDEN_SIZE])
-
-            x, h, outputs = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
-            loss = weighted_mse(outputs, label, RATE)
-            loss.backward()
-            optim_det.step()
-            detnet.r_cell.linear_h.rezeroWeights()
-            detnet.r_cell.linear_x.rezeroWeights()
-
-            # print statistics
-            running_loss += loss.item()
-            if i % (round(N_TRAIN * TRAIN_SPLIT / BATCH_SIZE)) == round(N_TRAIN * TRAIN_SPLIT / BATCH_SIZE) - 1:
-                print('[%d, %5d] loss: %.3f' %
-                      (epoch + 1, i + 1, running_loss / round(N_TRAIN * TRAIN_SPLIT / BATCH_SIZE)))
-                running_loss = 0.0
-        # Validation loss
-        val_loss = 0.0
-        val_steps = 0
-        for i, data in enumerate(val_loader, 0):
-            with torch.no_grad():
-                detnet.eval()
-                # prenet1.eval()
-                y, h_com, label = data['y'], data['h_com'], data['label']
-                inputs = (y, h_com)
-
-                x_ini = torch.randint(2 ** RATE, [BATCH_SIZE, 2 * TX, 1])  # 16QAM
-                x_ini = (2 * x_ini - 2 ** RATE + 1).to(torch.float32)
-                h_ini = torch.zeros([BATCH_SIZE, RNN_HIDDEN_SIZE])
-
-                x, h, outputs = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
-                loss = weighted_mse(outputs, label, RATE)
-                val_loss += loss.numpy()
-                val_steps += 1
-        print('validation loss: %.3f' % (val_loss / val_steps))
-        scheduler.step()
-
-    print('Training finished')
+    PATH = '../../pretrained_projectionX_Extension/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/project_times%i/batch_size%i/rnn_hidden_size%i/step_size%.5f/extension3' % (TX, RX, RATE,
+                                                                                                            EBN0_TRAIN,
+                                                                                                            ITERATIONS,
+                                                                                                            PROJECT_TIMES,
+                                                                                                            BATCH_SIZE,
+                                                                                                            RNN_HIDDEN_SIZE,
+                                                                                                            STEP_SIZE)
+    prenet1 = ProjectionX.DetModel(TX, RNN_HIDDEN_SIZE, PROJECT_TIMES)
+    prenet1.load_state_dict(torch.load(PATH + str('/model_part1.pt')))
+    prenet2 = ProjectionX.DetModel(TX, RNN_HIDDEN_SIZE, 3)
+    prenet2.load_state_dict(torch.load(PATH + str('/model_part2.pt')))
 
     # --------------------------------------------------- Test ---------------------------------------------------------
     with torch.no_grad():
-        detnet.eval()
+        prenet1.eval()
+        prenet2.eval()
         test_loss = 0.0
         test_steps = 0
         predictions = []
@@ -148,51 +101,59 @@ if __name__ == '__main__':
             x_ini = (2 * x_ini - 2 ** RATE + 1).to(torch.float32)
             h_ini = torch.zeros([BATCH_SIZE, RNN_HIDDEN_SIZE])
 
-            x, h, outputs = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
+            x, h, outputs1 = prenet1(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
+            x = x.unsqueeze(-1)
+            x, h, outputs2 = prenet2(inputs, x, h, STEP_SIZE, ITERATIONS)
+            outputs = outputs1 + outputs2
+            # x, h, outputs = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
             loss = weighted_mse(outputs, label, RATE)
             predictions += [x]
             test_loss += loss.numpy()
             test_steps += 1
         print('test loss: %.3f' % (test_loss / test_steps))
         predictions = torch.cat(predictions).cpu().numpy()
-        predictions = ((predictions + LENGTH - 1)/2).round()
-        ber = gray_ber(predictions, test_Data_real, test_Data_imag, rate=RATE)
-    # ------------------------------------------------ Whole Test ------------------------------------------------------
-    with torch.no_grad():
-        detnet.eval()
-        TEST_EBN0 = np.linspace(0, 15, 16)
-        BER = []
-        for ebn0 in TEST_EBN0:
-            test_y, test_h_com, test_Data_real, test_Data_imag = data_preparation.get_mmse(tx=TX, rx=RX,
-                                                                                                  K=N_TEST, rate=RATE,
-                                                                                                  EbN0=ebn0)
-            test_set = DetDataset(test_y, test_h_com, test_Data_real, test_Data_imag)
-            test_loader = Data.DataLoader(test_set, batch_size=BATCH_SIZE, shuffle=False)
-            with torch.no_grad():
-                detnet.eval()
-                test_loss = 0.0
-                test_steps = 0
-                prediction = []
-                for i, data in enumerate(test_loader, 0):
-                    y, h_com, label = data['y'], data['h_com'], data['label']
-                    inputs = (y, h_com)
+        # predictions = ((predictions + LENGTH - 1)/2).round()
+        # ber = gray_ber(predictions, test_Data_real, test_Data_imag, rate=RATE)
+    # ------------------------------------------------ Weights Plot ----------------------------------------------------
+    style_size = 0.1
+    points = outputs2[0].numpy()
+    real_part = points[:, :TX]
+    imag_part = points[:, TX:]
+    plt.figure()
+    plt.scatter(real_part, imag_part, style_size)
 
-                    x_ini = torch.randint(2 ** RATE, [BATCH_SIZE, 2 * TX, 1])  # 16QAM
-                    x_ini = (2 * x_ini - 2 ** RATE + 1).to(torch.float32)
-                    h_ini = torch.zeros([BATCH_SIZE, RNN_HIDDEN_SIZE])
+    points = outputs2[1].numpy()
+    real_part = points[:, :TX]
+    imag_part = points[:, TX:]
+    plt.scatter(real_part, imag_part, style_size)
 
-                    x, h, outputs = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
+    points = predictions
+    # points = outputs2[2].numpy()
+    real_part = points[:, :TX]
+    imag_part = points[:, TX:]
+    plt.scatter(real_part, imag_part, style_size)
 
-                    loss = weighted_mse(outputs, label, RATE)
-                    prediction += [x]
-                    test_loss += loss.numpy()
-                    test_steps += 1
-                print('test loss: %.3f' % (test_loss / test_steps))
+    # points = outputs[3].numpy()
+    # real_part = points[:, :TX]
+    # imag_part = points[:, TX:]
+    # plt.scatter(real_part, imag_part, style_size)
 
-                prediction = torch.cat(prediction).numpy()
-                prediction = ((prediction + LENGTH - 1) / 2).round()
-                ber = gray_ber(prediction, test_Data_real, test_Data_imag, rate=RATE)
-                BER += [ber]
+    ax = plt.gca()
+    ax.spines['top'].set_color('none')
+    ax.spines['right'].set_color('none')
+
+    ax.xaxis.set_ticks_position('bottom')
+    ax.spines['bottom'].set_position(('data', 0))
+    ax.spines['left'].set_position(('data', 0))
+    plt.xticks([-3, -1, 1, 3])
+    plt.yticks([-3, -1, 1, 3])
+
+    plt.legend(['projection', 'projection 2', 'projection 3', 'projection 4'], loc=1)
+    plt.title('Projection method for 16QAM')
+    plt.xlabel('Re', loc='right', fontdict={'fontsize': 'x-large', 'fontweight': 'bold'})
+    plt.ylabel('Im', loc='bottom', fontdict={'fontsize': 'x-large', 'fontweight': 'bold', 'rotation': 'horizontal'})
+
+
     # --------------------------------------- Save Model & Data --------------------------------------------------------
     PATH = '../../pretrained_projectionX/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/project_times%i/batch_size%i/rnn_hidden_size%i/step_size%.5f' % (TX, RX, RATE,
                                                                                                             EBN0_TRAIN,

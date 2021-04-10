@@ -51,7 +51,7 @@ if __name__ == '__main__':
     BATCH_SIZE = 20
     EPOCHS = 100
     PROJECT_TIMES = 4
-    RNN_HIDDEN_SIZE = 6 * TX
+    RNN_HIDDEN_SIZE = 4 * TX
     STEP_SIZE = 0.012
     ITERATIONS = 5
 
@@ -66,15 +66,17 @@ if __name__ == '__main__':
     val_loader = Data.DataLoader(valSet, batch_size=BATCH_SIZE, shuffle=False)
     test_loader = Data.DataLoader(test_set, batch_size=BATCH_SIZE, shuffle=False)
     # ------------------------------------- Establish Network ----------------------------------------------
-    # PATH = '../../pretrained_projectionV/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/project_times%i/batch_size%i/rnn_hidden_size%i/step_size%.5f' % (TX, RX, RATE,
-    #                                                                                                         EBN0_TRAIN,
-    #                                                                                                         ITERATIONS,
-    #                                                                                                         PROJECT_TIMES,
-    #                                                                                                         BATCH_SIZE,
-    #                                                                                                         RNN_HIDDEN_SIZE,
-    #                                                                                                         STEP_SIZE)
-    detnet = ProjectionX.DetModel(TX, RNN_HIDDEN_SIZE, PROJECT_TIMES)
-    # detnet.load_state_dict(torch.load(PATH + str('/model.pt')))
+    PATH = '../../pretrained_projectionX/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/project_times%i/batch_size%i/rnn_hidden_size%i/step_size%.5f' % (TX, RX, RATE,
+                                                                                                            EBN0_TRAIN,
+                                                                                                            ITERATIONS,
+                                                                                                            PROJECT_TIMES,
+                                                                                                            BATCH_SIZE,
+                                                                                                            RNN_HIDDEN_SIZE,
+                                                                                                            STEP_SIZE)
+    pre_det1 = ProjectionX.DetModel(TX, RNN_HIDDEN_SIZE, PROJECT_TIMES)
+    pre_det1.load_state_dict(torch.load(PATH + str('/model.pt')))
+
+    detnet = ProjectionX.DetModel(TX, RNN_HIDDEN_SIZE, 3)
 
     optim_det = torch.optim.Adam(detnet.parameters(), lr=5e-4)
     scheduler = torch.optim.lr_scheduler.StepLR(optim_det, step_size=10, gamma=0.2)
@@ -82,6 +84,7 @@ if __name__ == '__main__':
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optim_det, [10, 20, 35, 50, 70, 90], 0.1)
 
     # ------------------------------------- Train ----------------------------------------------------------
+    pre_det1.requires_grad_(False)
     print('Begin Training:')
     for epoch in range(EPOCHS):
         running_loss = 0.0
@@ -98,8 +101,12 @@ if __name__ == '__main__':
             x_ini = (2 * x_ini - 2 ** RATE + 1).to(torch.float32)
             h_ini = torch.zeros([BATCH_SIZE, RNN_HIDDEN_SIZE])
 
-            x, h, outputs = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
-            loss = weighted_mse(outputs, label, RATE)
+            x, h, outputs1 = pre_det1(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
+            x = x.unsqueeze(-1)
+            x, h, outputs2 = detnet(inputs, x, h, STEP_SIZE, ITERATIONS)
+            # outputs = outputs1+outputs2
+
+            loss = weighted_mse(outputs2, label, RATE)
             loss.backward()
             optim_det.step()
             detnet.r_cell.linear_h.rezeroWeights()
@@ -125,8 +132,12 @@ if __name__ == '__main__':
                 x_ini = (2 * x_ini - 2 ** RATE + 1).to(torch.float32)
                 h_ini = torch.zeros([BATCH_SIZE, RNN_HIDDEN_SIZE])
 
-                x, h, outputs = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
-                loss = weighted_mse(outputs, label, RATE)
+                x, h, outputs1 = pre_det1(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
+                x = x.unsqueeze(-1)
+                x, h, outputs2 = detnet(inputs, x, h, STEP_SIZE, ITERATIONS)
+                # outputs = outputs1 + outputs2
+
+                loss = weighted_mse(outputs2, label, RATE)
                 val_loss += loss.numpy()
                 val_steps += 1
         print('validation loss: %.3f' % (val_loss / val_steps))
@@ -148,7 +159,10 @@ if __name__ == '__main__':
             x_ini = (2 * x_ini - 2 ** RATE + 1).to(torch.float32)
             h_ini = torch.zeros([BATCH_SIZE, RNN_HIDDEN_SIZE])
 
-            x, h, outputs = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
+            x, h, outputs1 = pre_det1(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
+            x = x.unsqueeze(-1)
+            x, h, outputs2 = detnet(inputs, x, h, STEP_SIZE, ITERATIONS)
+            outputs = outputs1 + outputs2
             loss = weighted_mse(outputs, label, RATE)
             predictions += [x]
             test_loss += loss.numpy()
@@ -181,7 +195,10 @@ if __name__ == '__main__':
                     x_ini = (2 * x_ini - 2 ** RATE + 1).to(torch.float32)
                     h_ini = torch.zeros([BATCH_SIZE, RNN_HIDDEN_SIZE])
 
-                    x, h, outputs = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
+                    x, h, outputs1 = pre_det1(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
+                    x = x.unsqueeze(-1)
+                    x, h, outputs2 = detnet(inputs, x, h, STEP_SIZE, ITERATIONS)
+                    outputs = outputs1 + outputs2
 
                     loss = weighted_mse(outputs, label, RATE)
                     prediction += [x]
@@ -194,7 +211,7 @@ if __name__ == '__main__':
                 ber = gray_ber(prediction, test_Data_real, test_Data_imag, rate=RATE)
                 BER += [ber]
     # --------------------------------------- Save Model & Data --------------------------------------------------------
-    PATH = '../../pretrained_projectionX/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/project_times%i/batch_size%i/rnn_hidden_size%i/step_size%.5f' % (TX, RX, RATE,
+    PATH = '../../pretrained_projectionX_Extension/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/project_times%i/batch_size%i/rnn_hidden_size%i/step_size%.5f/extension3/' % (TX, RX, RATE,
                                                                                                             EBN0_TRAIN,
                                                                                                             ITERATIONS,
                                                                                                             PROJECT_TIMES,
@@ -204,6 +221,95 @@ if __name__ == '__main__':
     os.makedirs(PATH)
     data_ber = pd.DataFrame(BER, columns=['BER'])
     data_ber.to_csv(PATH+str('/ber.csv'))
-    torch.save(detnet.state_dict(), PATH+str('/model.pt'))
+    torch.save(pre_det1.state_dict(), PATH+str('/model_part1.pt'))
+    torch.save(detnet.state_dict(), PATH+str('/model_part2.pt'))
     # use the following line to load model
-    detnet.load_state_dict(torch.load(PATH + str('/model.pt')))
+    # detnet.load_state_dict(torch.load(PATH + str('/model.pt')))
+
+    # -------------------------------------- FineTune ------------------------------------------------------------------
+    FINETUNE_RATE = 1e-9
+    optim_pre1 = torch.optim.Adam(pre_det1.parameters(), lr=FINETUNE_RATE, weight_decay=0.001)
+    scheduler_pre1 = torch.optim.lr_scheduler.ExponentialLR(optim_pre1, gamma=0.9)
+    optim_pre2 = torch.optim.Adam(pre_det2.parameters(), lr=FINETUNE_RATE, weight_decay=0.001)
+    scheduler_pre2 = torch.optim.lr_scheduler.ExponentialLR(optim_pre2, gamma=0.9)
+    optim_pre3 = torch.optim.Adam(pre_det3.parameters(), lr=FINETUNE_RATE, weight_decay=0.001)
+    scheduler_pre3 = torch.optim.lr_scheduler.ExponentialLR(optim_pre3, gamma=0.9)
+    optim_pre4 = torch.optim.Adam(pre_det4.parameters(), lr=FINETUNE_RATE, weight_decay=0.001)
+    scheduler_pre4 = torch.optim.lr_scheduler.ExponentialLR(optim_pre4, gamma=0.9)
+
+    optim_det = torch.optim.Adam(detnet.parameters(), lr=FINETUNE_RATE, weight_decay=0.001)
+    scheduler = torch.optim.lr_scheduler.ExponentialLR(optim_det, gamma=0.9)
+
+    train_hty, train_hth, train_y, train_h_com, train_Data_real, train_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TRAIN, rate=RATE, EbN0=EBN0_TRAIN)
+    train_set = DetDataset(train_hty, train_hth, train_y, train_h_com)
+    trainSet, valSet = Data.random_split(train_set, [int(N_TRAIN * TRAIN_SPLIT), round(N_TRAIN * (1 - TRAIN_SPLIT))])
+    train_loader = Data.DataLoader(trainSet, batch_size=BATCH_SIZE, shuffle=False)
+    val_loader = Data.DataLoader(valSet, batch_size=BATCH_SIZE, shuffle=False)
+
+    pre_det1.requires_grad_(True)
+    pre_det1.train()
+    pre_det2.requires_grad_(True)
+    pre_det2.train()
+    pre_det3.requires_grad_(True)
+    pre_det3.train()
+    pre_det4.requires_grad_(True)
+    pre_det4.train()
+    detnet.train()
+    print('Begin Fine-tuning:')
+    for epoch in range(3):
+        running_loss = 0.0
+        for i, data in enumerate(train_loader, 0):
+            inputs, y, h_com = (data['hty'], data['hth']), data['y'], data['h_com']
+
+            # zero the parameter gradients
+            pre_det1.zero_grad()
+            pre_det2.zero_grad()
+            pre_det3.zero_grad()
+            pre_det4.zero_grad()
+            detnet.zero_grad()
+
+            # forward + backward + optimize
+            prediction1, h1 = pre_det1(inputs, x_ini, h_ini)
+            prediction2, h2 = pre_det2(inputs, prediction1[-1], h1)
+            prediction3, h3 = pre_det3(inputs, prediction2[-1], h2)
+            prediction4, h4 = pre_det4(inputs, prediction3[-1], h3)
+            prediction5, h5 = detnet(inputs, prediction4[-1], h4)
+            predictions = prediction1 + prediction2 + prediction3 + prediction4 + prediction5
+            loss = ml_loss(predictions, y, h_com)
+            loss.backward()
+            optim_pre1.step()
+            optim_pre2.step()
+            optim_pre3.step()
+            optim_pre4.step()
+            optim_det.step()
+
+            # print statistics
+            running_loss += loss.item()
+            if i % (round(N_TRAIN * TRAIN_SPLIT / BATCH_SIZE)) == round(N_TRAIN * TRAIN_SPLIT / BATCH_SIZE) - 1:
+                # writer.add_scalar('loss/train_loss', running_loss / round(N_TRAIN * TRAIN_SPLIT / BATCH_SIZE), epoch)
+                print('[%d, %5d] loss: %.3f' %
+                      (epoch + 1, i + 1, running_loss / round(N_TRAIN * TRAIN_SPLIT / BATCH_SIZE)))
+                running_loss = 0.0
+        # Validation loss
+        val_loss = 0.0
+        val_steps = 0
+        for i, data in enumerate(val_loader, 0):
+            with torch.no_grad():
+                inputs, y, h_com = (data['hty'], data['hth']), data['y'], data['h_com']
+                prediction1, h1 = pre_det1(inputs, x_ini, h_ini)
+                prediction2, h2 = pre_det2(inputs, prediction1[-1], h1)
+                prediction3, h3 = pre_det3(inputs, prediction2[-1], h2)
+                prediction4, h4 = pre_det4(inputs, prediction3[-1], h3)
+                prediction5, h5 = detnet(inputs, prediction4[-1], h4)
+                predictions = prediction1 + prediction2 + prediction3 + prediction4 + prediction5
+                loss = ml_loss(predictions, y, h_com)
+                val_loss += loss.cpu().numpy()
+                val_steps += 1
+        print('validation loss: %.3f' % (val_loss / val_steps))
+        scheduler_pre1.step()
+        scheduler_pre2.step()
+        scheduler_pre3.step()
+        scheduler_pre4.step()
+        scheduler.step()
+
+    print('Fine-tuning finished')

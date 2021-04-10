@@ -72,6 +72,25 @@ def get_mmse(tx=8, rx=8, K=1000, rate=1, EbN0=15):
     return receive_mmse, np.transpose(h_mmse, [2, 0, 1]), data_real, data_imag
 
 
+def noise_free_data(tx=8, rx=8, K=1000, rate=1):
+    l = np.power(2, rate)    # PAM alphabet size
+    # gray_table = gray_map(rate)
+
+    data_real = np.random.randint(0, l, [tx, K])
+    data_imag = np.random.randint(0, l, [tx, K])
+    data_com = np.vstack([2 * data_real - l + 1, 2 * data_imag - l + 1])    # (2tx, K)
+
+    h_real = np.sqrt(1/2) * np.random.randn(rx, tx, K)
+    h_imag = np.sqrt(1/2) * np.random.randn(rx, tx, K)
+    h_com = np.vstack([np.hstack([h_real, -1*h_imag]),  # (2rx, 2tx, K)
+                      np.hstack([h_imag, h_real])])
+
+    # y(K, 2rx)
+    receive_signal = np.matmul(np.transpose(h_com, [2, 0, 1]), np.expand_dims(data_com.T, axis=-1)).squeeze(-1)  # (K, 2rx)
+
+    return receive_signal, np.transpose(h_com, [2, 0, 1]), data_real, data_imag
+
+
 def get_onehot_label(data_real, data_imag):
     cat = np.concatenate([data_real, data_imag])
     onehot = OneHotEncoder(sparse=False)

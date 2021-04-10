@@ -80,3 +80,39 @@ def weighted_mse(predictions, labels, rate):
     for i, prediction in enumerate(predictions, 0):
         loss += loss_fn(prediction, modulated_labels) * torch.log(torch.Tensor([i+1]))
     return loss
+
+
+def tree_step1(predictions, labels, rate):
+    """
+    Especially for 16QAM;
+    1, 3 -> 2; -1, -3 -> -2
+    :param predictions:
+    :param labels:
+    :param rate:
+    :return:
+    """
+    loss_fn = torch.nn.MSELoss()
+    modulated_labels = (2 * labels - 2**rate + 1).to(torch.float32)
+    tree_labels = torch.where(torch.greater(modulated_labels, 0), 2*torch.ones_like(modulated_labels), -2*torch.ones_like(modulated_labels))
+    loss = 0
+    for i, prediction in enumerate(predictions, 0):
+        loss += loss_fn(prediction, tree_labels) * torch.log(torch.Tensor([i+2]))
+    return loss
+
+
+def tree_step2(predictions, labels, rate):
+    """
+    Especially for 16QAM;
+    1, 3 -> 2; -1, -3 -> -2
+    :param predictions:
+    :param labels:
+    :param rate:
+    :return:
+    """
+    loss_fn = torch.nn.MSELoss()
+    modulated_labels = (2 * labels - 2**rate + 1).to(torch.float32)
+
+    loss = 0
+    for i, prediction in enumerate(predictions, 0):
+        loss += loss_fn(prediction, modulated_labels) * torch.log(torch.Tensor([i+2]))
+    return loss
