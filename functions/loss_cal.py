@@ -71,3 +71,12 @@ def ml_loss_single(prediction, y, h_com):
     loss_fn = torch.nn.MSELoss().cuda()
     loss = loss_fn(y, torch.bmm(h_com, prediction.view(y.shape[0], -1, 1)).squeeze(-1)).cpu()
     return loss
+
+
+def weighted_mse(predictions, labels, rate):
+    loss_fn = torch.nn.MSELoss()
+    modulated_labels = (2 * labels - 2**rate + 1).to(torch.float32)
+    loss = 0
+    for i, prediction in enumerate(predictions, 0):
+        loss += loss_fn(prediction, modulated_labels) * torch.log(torch.Tensor([i+1]))
+    return loss

@@ -1,8 +1,7 @@
-from functions import data_with_channel
+from functions import data_preparation
 from functions.test_functions import gray_ber
-# from functions.loss_cal import ml_loss_single
-from functions.loss_cal import common_loss
-from model.CPU_model import ProjectionIV
+from functions.loss_cal import weighted_mse
+from model.CPU_model import ProjectionX
 import torch
 import torch.nn as nn
 import torch.utils.data as Data
@@ -43,21 +42,21 @@ class DetDataset(Dataset):
 if __name__ == '__main__':
     TX = 16
     RX = 16
-    N_TRAIN = 20000
+    N_TRAIN = 100000
     N_TEST = 2000
     TRAIN_SPLIT = 0.9
-    RATE = 1
+    RATE = 2
     EBN0_TRAIN = 10
     LENGTH = 2 ** RATE
     BATCH_SIZE = 20
     EPOCHS = 100
-    PROJECT_TIMES = 4
-    RNN_HIDDEN_SIZE = 6 * TX
+    PROJECT_TIMES = 5
+    RNN_HIDDEN_SIZE = 8 * TX
     STEP_SIZE = 0.012
-    ITERATIONS = 10
+    ITERATIONS = 8
 
-    _, _, train_y, train_h_com, train_Data_real, train_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TRAIN, rate=RATE, EbN0=EBN0_TRAIN)
-    _, _, test_y, test_h_com, test_Data_real, test_Data_imag = data_with_channel.get_data(tx=TX, rx=RX, K=N_TEST, rate=RATE, EbN0=EBN0_TRAIN)
+    train_y, train_h_com, train_Data_real, train_Data_imag = data_preparation.get_mmse(tx=TX, rx=RX, K=N_TRAIN, rate=RATE, EbN0=EBN0_TRAIN)
+    test_y, test_h_com, test_Data_real, test_Data_imag = data_preparation.get_mmse(tx=TX, rx=RX, K=N_TEST, rate=RATE, EbN0=EBN0_TRAIN)
 
     train_set = DetDataset(train_y, train_h_com, train_Data_real, train_Data_imag)
     test_set = DetDataset(test_y, test_h_com, test_Data_real, test_Data_imag)
@@ -67,17 +66,19 @@ if __name__ == '__main__':
     val_loader = Data.DataLoader(valSet, batch_size=BATCH_SIZE, shuffle=False)
     test_loader = Data.DataLoader(test_set, batch_size=BATCH_SIZE, shuffle=False)
     # ------------------------------------- Establish Network ----------------------------------------------
-    # PATH = '../../pretrained_projectionIII/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/batch_size%i/rnn_hidden_size%i/step_size%.5f' % (TX, RX, RATE,
+    # PATH = '../../pretrained_projectionV/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/project_times%i/batch_size%i/rnn_hidden_size%i/step_size%.5f' % (TX, RX, RATE,
     #                                                                                                         EBN0_TRAIN,
     #                                                                                                         ITERATIONS,
+    #                                                                                                         PROJECT_TIMES,
     #                                                                                                         BATCH_SIZE,
     #                                                                                                         RNN_HIDDEN_SIZE,
     #                                                                                                         STEP_SIZE)
-    detnet = ProjectionIV.DetModel(TX, RNN_HIDDEN_SIZE, PROJECT_TIMES)
+    detnet = ProjectionX.DetModel(TX, RNN_HIDDEN_SIZE, PROJECT_TIMES)
     # detnet.load_state_dict(torch.load(PATH + str('/model.pt')))
 
     optim_det = torch.optim.Adam(detnet.parameters(), lr=5e-4)
     scheduler = torch.optim.lr_scheduler.StepLR(optim_det, step_size=10, gamma=0.2)
+
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optim_det, [10, 20, 35, 50, 70, 90], 0.1)
 
     # ------------------------------------- Train ----------------------------------------------------------
@@ -97,10 +98,12 @@ if __name__ == '__main__':
             x_ini = (2 * x_ini - 2 ** RATE + 1).to(torch.float32)
             h_ini = torch.zeros([BATCH_SIZE, RNN_HIDDEN_SIZE])
 
-            x, h = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
-            loss = common_loss(x, label, RATE)
+            x, h, outputs = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
+            loss = weighted_mse(outputs, label, RATE)
             loss.backward()
             optim_det.step()
+            detnet.r_cell.linear_h.rezeroWeights()
+            detnet.r_cell.linear_x.rezeroWeights()
 
             # print statistics
             running_loss += loss.item()
@@ -114,6 +117,7 @@ if __name__ == '__main__':
         for i, data in enumerate(val_loader, 0):
             with torch.no_grad():
                 detnet.eval()
+                # prenet1.eval()
                 y, h_com, label = data['y'], data['h_com'], data['label']
                 inputs = (y, h_com)
 
@@ -121,8 +125,8 @@ if __name__ == '__main__':
                 x_ini = (2 * x_ini - 2 ** RATE + 1).to(torch.float32)
                 h_ini = torch.zeros([BATCH_SIZE, RNN_HIDDEN_SIZE])
 
-                x, h = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
-                loss = common_loss(x, label, RATE)
+                x, h, outputs = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
+                loss = weighted_mse(outputs, label, RATE)
                 val_loss += loss.numpy()
                 val_steps += 1
         print('validation loss: %.3f' % (val_loss / val_steps))
@@ -140,12 +144,12 @@ if __name__ == '__main__':
             y, h_com, label = data['y'], data['h_com'], data['label']
             inputs = (y, h_com)
 
-            x_ini = torch.randint(2 ** RATE, [BATCH_SIZE, 2 * TX, 1])  # 16QAM
+            x_ini = torch.randint(2 ** RATE, [BATCH_SIZE, 2 * TX, 1])
             x_ini = (2 * x_ini - 2 ** RATE + 1).to(torch.float32)
             h_ini = torch.zeros([BATCH_SIZE, RNN_HIDDEN_SIZE])
 
-            x, h = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
-            loss = common_loss(x, label, RATE)
+            x, h, outputs = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
+            loss = weighted_mse(outputs, label, RATE)
             predictions += [x]
             test_loss += loss.numpy()
             test_steps += 1
@@ -159,7 +163,7 @@ if __name__ == '__main__':
         TEST_EBN0 = np.linspace(0, 15, 16)
         BER = []
         for ebn0 in TEST_EBN0:
-            _, _, test_y, test_h_com, test_Data_real, test_Data_imag = data_with_channel.get_data(tx=TX, rx=RX,
+            test_y, test_h_com, test_Data_real, test_Data_imag = data_preparation.get_mmse(tx=TX, rx=RX,
                                                                                                   K=N_TEST, rate=RATE,
                                                                                                   EbN0=ebn0)
             test_set = DetDataset(test_y, test_h_com, test_Data_real, test_Data_imag)
@@ -177,9 +181,9 @@ if __name__ == '__main__':
                     x_ini = (2 * x_ini - 2 ** RATE + 1).to(torch.float32)
                     h_ini = torch.zeros([BATCH_SIZE, RNN_HIDDEN_SIZE])
 
-                    x, h = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
+                    x, h, outputs = detnet(inputs, x_ini, h_ini, STEP_SIZE, ITERATIONS)
 
-                    loss = common_loss(x, label, RATE)
+                    loss = weighted_mse(outputs, label, RATE)
                     prediction += [x]
                     test_loss += loss.numpy()
                     test_steps += 1
@@ -190,7 +194,7 @@ if __name__ == '__main__':
                 ber = gray_ber(prediction, test_Data_real, test_Data_imag, rate=RATE)
                 BER += [ber]
     # --------------------------------------- Save Model & Data --------------------------------------------------------
-    PATH = '../../pretrained_projectionIV/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/project_times%i/batch_size%i/rnn_hidden_size%i/step_size%.5f' % (TX, RX, RATE,
+    PATH = '../../pretrained_projectionX/tx%i/rx%i/rate%i/EBN0_Train%i/iterations%i/project_times%i/batch_size%i/rnn_hidden_size%i/step_size%.5f' % (TX, RX, RATE,
                                                                                                             EBN0_TRAIN,
                                                                                                             ITERATIONS,
                                                                                                             PROJECT_TIMES,
@@ -200,12 +204,9 @@ if __name__ == '__main__':
     os.makedirs(PATH)
     data_ber = pd.DataFrame(BER, columns=['BER'])
     data_ber.to_csv(PATH+str('/ber.csv'))
-    torch.save(pre_det1.state_dict(), PATH+str('/model3_part1.pt'))
-    torch.save(pre_det2.state_dict(), PATH+str('/model3_part2.pt'))
-    # torch.save(pre_det3.state_dict(), PATH+str('/model2_part3.pt'))
     torch.save(detnet.state_dict(), PATH+str('/model.pt'))
     # use the following line to load model
-    detnet.load_state_dict(torch.load(PATH + str('/model1.pt')))
+    detnet.load_state_dict(torch.load(PATH + str('/model.pt')))
 
     # -------------------------------------- FineTune ------------------------------------------------------------------
     FINETUNE_RATE = 1e-9

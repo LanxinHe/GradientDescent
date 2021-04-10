@@ -1,6 +1,6 @@
 import numpy as np
-from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import OneHotEncoder
+# from sklearn.preprocessing import StandardScaler
+# from sklearn.preprocessing import OneHotEncoder
 
 
 def get_data(tx=8, rx=8, K=20000, rate=1, EbN0=15):
